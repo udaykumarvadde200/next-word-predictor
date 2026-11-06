@@ -1,3 +1,4 @@
-torch
+﻿torch
 gradio
 datasets
+transformers
