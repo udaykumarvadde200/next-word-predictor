@@ -3,27 +3,34 @@ import torch
 import gradio as gr
 from common import load_ckpt, suggest, generate
 
-MODELS = {k: load_ckpt(f"runs/{k}.pt") for k in ("lstm", "gru") if os.path.exists(f"runs/{k}.pt")}
+RUNS = "runs103" if os.path.exists("runs103") else "runs"
+MODELS = {k: load_ckpt(f"{RUNS}/{k}.pt") for k in ("lstm", "gru") if os.path.exists(f"{RUNS}/{k}.pt")}
 GPT = {}
 
 
 def gpt_load():
     if not GPT:
         from transformers import AutoTokenizer, AutoModelForCausalLM
-        GPT["tok"] = AutoTokenizer.from_pretrained("distilgpt2")
-        GPT["model"] = AutoModelForCausalLM.from_pretrained("distilgpt2").eval()
-    return GPT["tok"], GPT["model"]
+        tok = AutoTokenizer.from_pretrained("distilgpt2")
+        model = AutoModelForCausalLM.from_pretrained("distilgpt2").eval()
+        vocab = [tok.decode([i]) for i in range(model.config.vocab_size)]
+        ok = torch.tensor([v.startswith(" ") and v[1:].isalpha() for v in vocab])
+        GPT.update(tok=tok, model=model, ok=ok)
+    return GPT["tok"], GPT["model"], GPT["ok"]
 
 
 @torch.no_grad()
 def gpt_predict(text, temp, n):
-    tok, model = gpt_load()
-    ids = tok(text, return_tensors="pt").input_ids[:, -200:]
-    probs = torch.softmax(model(ids).logits[0, -1], -1)
-    vals, idx = probs.topk(5)
-    top = {tok.decode(int(j)).strip() or "(space)": float(p) for p, j in zip(vals, idx)}
-    out = model.generate(ids, max_new_tokens=int(n), do_sample=True, temperature=temp,
-                         top_k=50, pad_token_id=tok.eos_token_id)
+    tok, model, ok = gpt_load()
+    ids = tok(text.rstrip(), return_tensors="pt").input_ids[:, -200:]
+    logits = model(ids).logits[0, -1].clone()
+    logits[~ok] = float("-inf")  # only allow tokens that start a new word
+    vals, idx = torch.softmax(logits, -1).topk(5)
+    top = {tok.decode([int(j)]).strip(): float(p) for p, j in zip(vals, idx)}
+    first = torch.multinomial(torch.softmax(logits / temp, -1), 1)
+    ids = torch.cat([ids, first.view(1, 1)], dim=1)
+    out = model.generate(ids, attention_mask=torch.ones_like(ids), max_new_tokens=int(n),
+                         do_sample=True, temperature=temp, top_k=50, pad_token_id=tok.eos_token_id)
     return top, tok.decode(out[0], skip_special_tokens=True)
 
 
@@ -37,7 +44,7 @@ def predict(text, which, temp, n_words):
 
 
 with gr.Blocks(title="Next Word Predictor") as demo:
-    gr.Markdown("# Next Word Predictor\nCompare LSTM and GRU (trained from scratch on WikiText-2) with pretrained DistilGPT-2.")
+    gr.Markdown("# Next Word Predictor\nCompare LSTM and GRU (trained from scratch) with pretrained DistilGPT-2.")
     text = gr.Textbox(label="Your text", lines=2, placeholder="the history of the")
     with gr.Row():
         which = gr.Radio(list(MODELS) + ["distilgpt2 (pretrained)"], value=list(MODELS)[0], label="Model")
