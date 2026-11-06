@@ -1,4 +1,4 @@
-import argparse, json, math, os
+﻿import argparse, json, math, os
 from collections import Counter
 import torch
 import torch.nn as nn
@@ -6,10 +6,14 @@ from common import tokenize, LM
 
 
 def load_text(src):
-    if src == "wikitext2":
+    if src in ("wikitext2", "wikitext103"):
         from datasets import load_dataset
-        d = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
-        return ["\n".join(d[s]["text"]) for s in ("train", "validation", "test")]
+        name = "wikitext-103-raw-v1" if src == "wikitext103" else "wikitext-2-raw-v1"
+        d = load_dataset("Salesforce/wikitext", name)
+        tr = d["train"]["text"]
+        if src == "wikitext103":
+            tr = tr[:400000]
+        return ["\n".join(tr)] + ["\n".join(d[s]["text"]) for s in ("validation", "test")]
     t = open(src, encoding="utf-8").read()
     a, b = int(len(t) * 0.9), int(len(t) * 0.95)
     return [t[:a], t[a:b], t[b:]]
@@ -40,7 +44,7 @@ def evaluate(model, x, y, dev, bs=256):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="wikitext2", help="'wikitext2' or path to a .txt file")
+    ap.add_argument("--data", default="wikitext2", help="'wikitext2', 'wikitext103' or path to a .txt file")
     ap.add_argument("--model", default="lstm", choices=["lstm", "gru"])
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--seq-len", type=int, default=35)
