@@ -8,7 +8,7 @@ from common import tokenize, LM
 def load_text(src):
     if src == "wikitext2":
         from datasets import load_dataset
-        d = load_dataset("wikitext", "wikitext-2-raw-v1")
+        d = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         return ["\n".join(d[s]["text"]) for s in ("train", "validation", "test")]
     t = open(src, encoding="utf-8").read()
     a, b = int(len(t) * 0.9), int(len(t) * 0.95)

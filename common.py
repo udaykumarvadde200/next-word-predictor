@@ -4,7 +4,7 @@ import torch.nn as nn
 
 
 def tokenize(text):
-    return re.findall(r"[a-z']+|[.,!?;]", text.lower())
+    return re.findall(r"[a-z0-9']+|[.,!?;]", text.lower())
 
 
 class LM(nn.Module):

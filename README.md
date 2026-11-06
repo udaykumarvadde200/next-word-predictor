@@ -24,6 +24,15 @@ Use `--data path/to/file.txt` to train on your own text. A free Colab/Kaggle GPU
 ## Results
 Paste the output of `python compare.py` here, then add 5-10 example predictions,
 2-3 failure cases (rare words, long-range context), and a screenshot of the demo.
+## Results
+Trained for 8 epochs on WikiText-2 (10k-word vocabulary, sequence length 35, same hyperparameters for both models).
+
+| Model | Params | Test perplexity | Top-1 | Top-3 | Top-5 |
+|---|---|---|---|---|---|
+| GRU | 10.4M | 127.6 | 22.1% | 38.0% | 45.1% |
+| LSTM | 11.4M | 107.5 | 23.8% | 40.0% | 47.0% |
+
+The LSTM generalized better in this setup: its validation perplexity kept improving through epoch 8, while the GRU plateaued earlier. Caveats: single run per model, and the LSTM has about 9% more parameters.
 
 ## Limitations
 - Closed 10k-word vocabulary; unseen words map to `<unk>`
