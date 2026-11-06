@@ -4,7 +4,7 @@ import gradio as gr
 from common import load_ckpt, suggest, generate
 
 RUNS = "runs103" if os.path.exists("runs103") else "runs"
-MODELS = {k: load_ckpt(f"{RUNS}/{k}.pt") for k in ("lstm", "gru") if os.path.exists(f"{RUNS}/{k}.pt")}
+MODELS = {k: load_ckpt(f"{RUNS}/{k}.pt") for k in ("lstm", "gru", "transformer") if os.path.exists(f"{RUNS}/{k}.pt")}
 GPT = {}
 
 
@@ -57,3 +57,4 @@ with gr.Blocks(title="Next Word Predictor") as demo:
 
 if __name__ == "__main__":
     demo.launch()
+

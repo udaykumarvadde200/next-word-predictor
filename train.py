@@ -2,7 +2,7 @@
 from collections import Counter
 import torch
 import torch.nn as nn
-from common import tokenize, LM
+from common import tokenize, build
 
 
 def load_text(src):
@@ -45,15 +45,19 @@ def evaluate(model, x, y, dev, bs=256):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="wikitext2", help="'wikitext2', 'wikitext103' or path to a .txt file")
-    ap.add_argument("--model", default="lstm", choices=["lstm", "gru"])
+    ap.add_argument("--model", default="lstm", choices=["lstm", "gru", "transformer"])
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--seq-len", type=int, default=35)
     ap.add_argument("--vocab", type=int, default=10000)
     ap.add_argument("--emb", type=int, default=256)
     ap.add_argument("--hid", type=int, default=512)
     ap.add_argument("--layers", type=int, default=2)
+    ap.add_argument("--heads", type=int, default=4)
+    ap.add_argument("--ff", type=int, default=1024)
+    ap.add_argument("--drop", type=float, default=0.3)
     ap.add_argument("--bs", type=int, default=64)
     ap.add_argument("--lr", type=float, default=2e-3)
+    ap.add_argument("--warmup", type=int, default=0, help="linear LR warmup steps")
     ap.add_argument("--out", default="runs")
     a = ap.parse_args()
 
@@ -66,16 +70,25 @@ def main():
     (xtr, ytr), (xva, yva), (xte, yte) = (make_seqs(enc(t), a.seq_len) for t in (tr_t, va_t, te_t))
     print(f"device={dev} vocab={len(itos)} train_seqs={len(xtr)}")
 
-    cfg = dict(emb=a.emb, hid=a.hid, layers=a.layers, kind=a.model, drop=0.3)
-    model = LM(len(itos), **cfg).to(dev)
+    if a.model == "transformer":
+        cfg = dict(kind="transformer", emb=a.emb, layers=a.layers, heads=a.heads,
+                   ff=a.ff, drop=a.drop, max_len=a.seq_len)
+    else:
+        cfg = dict(emb=a.emb, hid=a.hid, layers=a.layers, kind=a.model, drop=a.drop)
+    model = build(len(itos), cfg).to(dev)
+    print("params:", sum(p.numel() for p in model.parameters()))
     opt = torch.optim.Adam(model.parameters(), lr=a.lr)
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, factor=0.5, patience=0)
-    best, ckpt = float("inf"), f"{a.out}/{a.model}.pt"
+    best, ckpt, step = float("inf"), f"{a.out}/{a.model}.pt", 0
 
     for ep in range(1, a.epochs + 1):
         model.train()
         perm = torch.randperm(len(xtr))
         for i in range(0, len(perm), a.bs):
+            step += 1
+            if step <= a.warmup:
+                for g in opt.param_groups:
+                    g["lr"] = a.lr * step / a.warmup
             idx = perm[i : i + a.bs]
             xb, yb = xtr[idx].to(dev), ytr[idx].to(dev)
             loss = nn.functional.cross_entropy(model(xb).reshape(-1, len(itos)), yb.reshape(-1))
