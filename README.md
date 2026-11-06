@@ -1,46 +1,57 @@
 ﻿# Next Word Predictor: LSTM vs GRU
 
-Word-level next-word prediction with recurrent networks in PyTorch, trained on WikiText-2,
-with held-out evaluation (perplexity, top-k accuracy) and a live Gradio demo.
+Word-level next-word prediction with recurrent networks in PyTorch, with held-out evaluation
+(perplexity, top-k accuracy) and a live Gradio demo that also compares against pretrained DistilGPT-2.
 
 Inspired by [Bharath-K3/Next-Word-Prediction-with-NLP-and-Deep-Learning](https://github.com/Bharath-K3/Next-Word-Prediction-with-NLP-and-Deep-Learning).
 
 ## What's different from the original
-- Larger dataset (WikiText-2) instead of one short book
+- Much larger datasets (WikiText-2, then a subset of WikiText-103) instead of one short book
 - Validation/test splits with perplexity and top-1/3/5 accuracy
 - LSTM vs GRU comparison with identical hyperparameters
-- Interactive demo: top-5 suggestions, temperature slider, text generation
+- Demo with top-5 suggestions, temperature slider, text generation, and a pretrained DistilGPT-2 option for comparison
 
 ## Results
-Trained for 12 epochs on WikiText-2 (10k-word vocabulary, sequence length 35, best checkpoint by validation loss).
+Test set: WikiText test split, 10k-word vocabulary, sequence length 35, best checkpoint by validation loss.
+
+**WikiText-103 subset** (first 400,000 lines of the training split, 4 epochs, batch size 256)
+
+| Model | Params | Test perplexity | Top-1 | Top-3 | Top-5 |
+|---|---|---|---|---|---|
+| GRU | 10.4M | 82.0 | 24.9% | 41.3% | 48.4% |
+| LSTM | 11.4M | 71.0 | 26.1% | 42.7% | 49.8% |
+
+**WikiText-2** (12 epochs)
 
 | Model | Params | Test perplexity | Top-1 | Top-3 | Top-5 |
 |---|---|---|---|---|---|
 | GRU | 10.4M | 126.2 | 22.5% | 38.3% | 45.3% |
 | LSTM | 11.4M | 108.7 | 24.1% | 40.2% | 47.1% |
 
-The LSTM generalized better in this setup. Its validation perplexity flattened around 114, while the GRU was still creeping down at 133.
+More training data lowered the LSTM's test perplexity from 108.7 to 71.0. The LSTM beat the GRU on both datasets.
 Caveats: one run per model, and the LSTM has about 9% more parameters.
 
-![demo](screenshot.png)
-
-## Failure cases
-![failure case](failure.png)
-- **Low confidence:** for "a king named alexander the", the top suggestion gets only about 3%, and the next four are close behind. The model has no world knowledge, so it cannot complete "alexander the great".
-- **Topic drift:** generated text is locally grammatical but wanders off topic, because the model only sees a short window and was trained on about 2M words.
+## Failure cases and lessons
+- **Low confidence and topic drift:** with no pretraining, the models give low probabilities to many plausible words and generated text wanders off topic. The prompt "a king named alexander the" needs world knowledge (alexander the great) that a small from-scratch model only partly has.
 - **Bug found and fixed:** my first tokenizer stripped digits, so "19th century" became "th century". Numbers are now kept.
+- **Demo bug found and fixed:** DistilGPT-2 predicts subword tokens, so a prompt ending in "the" produced word fragments. The demo now restricts its suggestions to tokens that start a new word.
 
 ## Run
 ```bash
 pip install -r requirements.txt
-python train.py --model lstm --epochs 12
-python train.py --model gru --epochs 12
-python compare.py
+python train.py --data wikitext103 --model lstm --epochs 4 --bs 256 --out runs103
+python train.py --data wikitext103 --model gru --epochs 4 --bs 256 --out runs103
 python app.py
 ```
-Use `--data path/to/file.txt` to train on your own text.
+Use `--data wikitext2` (default) or `--data path/to/file.txt` for other data. The demo loads `runs103/` if it exists, otherwise `runs/`.
+Model files (`.pt`) are not in the repo; train them with the commands above.
 
 ## Limitations and next steps
 - Closed 10k-word vocabulary: unseen words become `<unk>`
-- No pretraining, so world knowledge and long-range context are weak
-- Next steps: subword tokenizer, small transformer, comparison against a pretrained model such as DistilGPT-2
+- DistilGPT-2 predicts subword tokens, so its perplexity is not comparable to these word-level numbers
+- Next steps: subword tokenizer, small transformer trained from scratch
+
+## Demo
+![demo](screenshot.png)
+
+![failure case](failure.png)
